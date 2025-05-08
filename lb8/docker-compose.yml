@@ -1,0 +1,100 @@
+version: '3.8'
+
+services:
+  microservice1:
+    build:
+      context: ./Microservice1
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    networks:
+      app_network:
+        aliases:
+          - csharp-service
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - DB_HOST=dbhost  # Используем алиас
+      - DB_PORT=5432
+      - DB_NAME=microservice_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+
+  microservice2:
+    build:
+      context: ./Microservice2
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    networks:
+      app_network:
+        aliases:
+          - python-service
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=dbhost  # Используем алиас
+      - DB_PORT=5432
+      - DB_NAME=microservice_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+
+  db:
+    image: postgres:15
+    networks:
+      app_network:
+        aliases:
+          - dbhost  # Основной алиас для БД
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: microservice_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d microservice_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4
+    networks:
+      app_network:
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+networks:
+  app_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: "172.20.0.0/24"
+          gateway: "172.20.0.1"
+    labels:
+      project: "lb8"
+      environment: "development"
+
+volumes:
+  postgres_data:
+    driver: local
+    labels:
+      type: "database"
+      service: "postgresql"
+  pgadmin_data:
+    driver: local
+    labels:
+      type: "admin"
+      service: "pgadmin4"
